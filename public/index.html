@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dev Assistant</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f1117; --surface: #1a1d27; --surface2: #22263a; --border: #2e3250;
+      --accent: #6c7fff; --accent-hover: #8a96ff; --text: #e2e4f0; --text-muted: #7b82a8;
+      --success: #4ade80; --error: #f87171; --radius: 12px;
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+    header { display: flex; align-items: center; gap: 12px; padding: 14px 24px; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
+    .logo { font-size: 22px; }
+    header h1 { font-size: 16px; font-weight: 600; }
+    .badge { font-size: 11px; background: var(--surface2); border: 1px solid var(--border); color: var(--text-muted); padding: 2px 8px; border-radius: 99px; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); margin-left: auto; box-shadow: 0 0 6px var(--success); }
+    #chat { flex: 1; overflow-y: auto; padding: 24px 0; scroll-behavior: smooth; }
+    .chat-inner { max-width: 820px; margin: 0 auto; padding: 0 24px; display: flex; flex-direction: column; gap: 20px; }
+    .welcome { text-align: center; padding: 40px 0 10px; }
+    .welcome h2 { font-size: 26px; font-weight: 700; margin-bottom: 8px; }
+    .welcome p  { color: var(--text-muted); font-size: 14px; line-height: 1.6; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 16px; }
+    .chip { background: var(--surface); border: 1px solid var(--border); color: var(--text-muted); padding: 6px 14px; border-radius: 99px; font-size: 13px; cursor: pointer; font-family: inherit; transition: border-color 0.2s, color 0.2s; }
+    .chip:hover { border-color: var(--accent); color: var(--text); }
+    .msg-row { display: flex; gap: 10px; align-items: flex-start; animation: fadeIn 0.25s ease; }
+    .msg-row.user { flex-direction: row-reverse; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; } }
+    .avatar { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; }
+    .avatar.user-av { background: var(--accent); }
+    .avatar.bot-av  { background: var(--surface2); border: 1px solid var(--border); }
+    .bubble { max-width: 72%; padding: 11px 15px; border-radius: var(--radius); font-size: 14px; line-height: 1.65; white-space: pre-wrap; word-break: break-word; }
+    .bubble.user  { background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+    .bubble.bot   { background: var(--surface); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+    .bubble.error { background: rgba(248,113,113,0.1); border-color: var(--error); color: var(--error); }
+    .pipeline-card { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .pipeline-header { padding: 11px 15px; background: var(--surface2); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
+    .pipeline-header .ps { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--text-muted); }
+    .stage-list { display: flex; flex-direction: column; }
+    .stage-item { border-bottom: 1px solid var(--border); }
+    .stage-item:last-child { border-bottom: none; }
+    .stage-row { display: flex; align-items: center; gap: 10px; padding: 10px 15px; cursor: pointer; user-select: none; transition: background 0.15s; }
+    .stage-row:hover { background: var(--surface2); }
+    .stage-icon { width: 20px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--border); }
+    .spinner-ring { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .check { color: var(--success); font-size: 15px; }
+    .stage-label { flex: 1; }
+    .stage-label strong { display: block; font-size: 13px; font-weight: 600; }
+    .stage-label small  { color: var(--text-muted); font-size: 11px; }
+    .sbadge { font-size: 11px; padding: 2px 8px; border-radius: 99px; font-weight: 600; }
+    .sbadge.pending { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); }
+    .sbadge.running { background: rgba(108,127,255,0.15); color: var(--accent); border: 1px solid var(--accent); }
+    .sbadge.done    { background: rgba(74,222,128,0.12); color: var(--success); border: 1px solid var(--success); }
+    .chev { color: var(--text-muted); font-size: 12px; transition: transform 0.2s; }
+    .chev.open { transform: rotate(90deg); }
+    .stage-output { display: none; padding: 12px 15px; font-size: 12px; line-height: 1.6; color: var(--text-muted); background: var(--bg); border-top: 1px solid var(--border); max-height: 220px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; }
+    .stage-output.open { display: block; }
+    .files-row { padding: 6px 15px 8px; font-size: 11px; color: var(--text-muted); border-top: 1px solid var(--border); background: var(--surface2); }
+    .file-chip { display: inline-block; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; margin: 2px 3px 2px 0; font-family: monospace; font-size: 11px; color: var(--accent); }
+    .done-card { flex: 1; background: rgba(74,222,128,0.05); border: 1px solid rgba(74,222,128,0.25); border-radius: var(--radius); padding: 14px 16px; font-size: 13px; }
+    .done-title { font-weight: 700; color: var(--success); margin-bottom: 6px; font-size: 14px; }
+    .done-dir   { font-family: monospace; font-size: 11px; color: var(--text-muted); word-break: break-all; margin-bottom: 10px; }
+    .input-bar { flex-shrink: 0; border-top: 1px solid var(--border); background: var(--surface); padding: 12px 24px; }
+    .input-inner { max-width: 820px; margin: 0 auto; display: flex; gap: 10px; align-items: flex-end; }
+    .input-wrap { flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); display: flex; align-items: flex-end; transition: border-color 0.2s; overflow: hidden; }
+    .input-wrap:focus-within { border-color: var(--accent); }
+    textarea { flex: 1; background: transparent; border: none; outline: none; color: var(--text); font-size: 14px; font-family: inherit; resize: none; padding: 10px 14px; min-height: 42px; max-height: 150px; line-height: 1.5; }
+    textarea::placeholder { color: var(--text-muted); }
+    .char-hint { padding: 0 10px 9px 0; font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+    .send-btn { width: 42px; height: 42px; background: var(--accent); border: none; border-radius: 10px; color: #fff; font-size: 18px; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: background 0.2s, opacity 0.2s; }
+    .send-btn:hover:not(:disabled) { background: var(--accent-hover); }
+    .send-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .hint { text-align: center; font-size: 11px; color: var(--text-muted); margin-top: 5px; }
+  </style>
+</head>
+<body>
+<header>
+  <div class="logo">&#129302;</div>
+  <h1>Dev Assistant</h1>
+  <span class="badge">SDLC Pipeline</span>
+  <div class="status-dot" title="Server online"></div>
+</header>
+
+<div id="chat">
+  <div class="chat-inner" id="chatInner">
+    <div class="welcome" id="welcome">
+      <h2>What do you want to build?</h2>
+      <p>Describe an application and I'll run the full SDLC pipeline in real time &mdash;<br>
+         requirements &rarr; architecture &rarr; implementation &rarr; code review &rarr; tests.</p>
+      <div class="chips">
+        <button class="chip" onclick="setMsg('Build a Spring Boot REST API for a to-do list with PostgreSQL')">Spring Boot To-Do API</button>
+        <button class="chip" onclick="setMsg('Create a Node.js Express REST API for user authentication with JWT')">Node.js Auth API</button>
+        <button class="chip" onclick="setMsg('Build a Python FastAPI microservice for inventory management')">Python Inventory Service</button>
+        <button class="chip" onclick="setMsg('What is retrieval-augmented generation and how does it work?')">Research question</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="input-bar">
+  <div class="input-inner">
+    <div class="input-wrap">
+      <textarea id="msgInput" placeholder="Describe an app to build, or ask a question&hellip;" rows="1" maxlength="10000"></textarea>
+      <span class="char-hint"><span id="charCount">0</span>/10000</span>
+    </div>
+    <button class="send-btn" id="sendBtn" disabled title="Send (Ctrl+Enter)">&#8593;</button>
+  </div>
+  <p class="hint">Ctrl+Enter to send &middot; Build requests run the full SDLC pipeline with live step-by-step output</p>
+</div>
+
+<script>
+  var chatInner = document.getElementById('chatInner');
+  var msgInput  = document.getElementById('msgInput');
+  var sendBtn   = document.getElementById('sendBtn');
+  var charCount = document.getElementById('charCount');
+  var isBusy = false;
+
+  msgInput.addEventListener('input', function() {
+    msgInput.style.height = 'auto';
+    msgInput.style.height = Math.min(msgInput.scrollHeight, 150) + 'px';
+    charCount.textContent = msgInput.value.length;
+    sendBtn.disabled = !msgInput.value.trim() || isBusy;
+  });
+  msgInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); if (!sendBtn.disabled) send(); }
+  });
+
+  function setMsg(t) { msgInput.value = t; msgInput.dispatchEvent(new Event('input')); msgInput.focus(); }
+
+  function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function scrollBottom() { document.getElementById('chat').scrollTop = 9999999; }
+  function removeWelcome() { var w = document.getElementById('welcome'); if (w) w.remove(); }
+
+  function addUserBubble(text) {
+    removeWelcome();
+    var row = document.createElement('div');
+    row.className = 'msg-row user';
+    row.innerHTML = '<div class="avatar user-av">&#128100;</div><div class="bubble user">' + esc(text) + '</div>';
+    chatInner.appendChild(row);
+    scrollBottom();
+  }
+
+  function addBotBubble(text, isError) {
+    var row = document.createElement('div');
+    row.className = 'msg-row';
+    row.innerHTML = '<div class="avatar bot-av">&#129302;</div><div class="bubble bot' + (isError ? ' error' : '') + '">' + esc(text) + '</div>';
+    chatInner.appendChild(row);
+    scrollBottom();
+    return row.querySelector('.bubble');
+  }
+
+  var STAGES = [
+    { step:1, name:'Requirements Analysis', agent:'Product Owner', icon:'&#128203;' },
+    { step:2, name:'Architecture Design',   agent:'Architect',     icon:'&#127959;' },
+    { step:3, name:'Implementation',        agent:'Developer',     icon:'&#128187;' },
+    { step:4, name:'Code Review',           agent:'Code Reviewer', icon:'&#128269;' },
+    { step:5, name:'Test Suite',            agent:'Tester',        icon:'&#129514;' }
+  ];
+
+  function createPipelineCard() {
+    removeWelcome();
+    var row = document.createElement('div'); row.className = 'msg-row';
+    var av  = document.createElement('div'); av.className = 'avatar bot-av'; av.innerHTML = '&#129302;';
+    var card = document.createElement('div'); card.className = 'pipeline-card';
+
+    var html = '<div class="pipeline-header">&#9881;&nbsp; SDLC Pipeline Running<span class="ps" id="ps">Initialising&hellip;</span></div>';
+    html += '<div class="stage-list">';
+    for (var i = 0; i < STAGES.length; i++) {
+      var s = STAGES[i];
+      html += '<div class="stage-item" id="si-' + s.step + '">'
+        + '<div class="stage-row" onclick="toggleOut(' + s.step + ')">'
+        + '<div class="stage-icon"><div class="dot"></div></div>'
+        + '<div class="stage-label"><strong>' + s.icon + ' ' + s.name + '</strong><small>' + s.agent + '</small></div>'
+        + '<span class="sbadge pending">Pending</span>'
+        + '<span class="chev" id="chev-' + s.step + '">&rsaquo;</span>'
+        + '</div>'
+        + '<div class="stage-output" id="sout-' + s.step + '"></div>'
+        + '</div>';
+    }
+    html += '</div>';
+    card.innerHTML = html;
+    row.appendChild(av); row.appendChild(card); chatInner.appendChild(row);
+    scrollBottom();
+  }
+
+  function toggleOut(step) {
+    var out = document.getElementById('sout-' + step);
+    var chev = document.getElementById('chev-' + step);
+    if (!out || !out.textContent.trim()) return;
+    out.classList.toggle('open'); chev.classList.toggle('open');
+  }
+
+  function stageRunning(step) {
+    var item = document.getElementById('si-' + step); if (!item) return;
+    item.querySelector('.stage-icon').innerHTML = '<div class="spinner-ring"></div>';
+    var badge = item.querySelector('.sbadge'); badge.className = 'sbadge running'; badge.textContent = 'Running…';
+    var ps = document.getElementById('ps'); if (ps) ps.textContent = 'Step ' + step + '/5 — ' + STAGES[step-1].name + '…';
+    // Auto-open the output panel so tokens are visible as they stream in
+    var out  = document.getElementById('sout-' + step);
+    var chev = document.getElementById('chev-' + step);
+    if (out)  out.classList.add('open');
+    if (chev) chev.classList.add('open');
+    scrollBottom();
+  }
+
+  function stageToken(step, token) {
+    var out = document.getElementById('sout-' + step); if (!out) return;
+    out.textContent += token;
+    // Keep the output panel scrolled to the bottom as tokens arrive
+    out.scrollTop = out.scrollHeight;
+  }
+
+  function stageDone(step, output, filesWritten) {
+    var item = document.getElementById('si-' + step); if (!item) return;
+    item.querySelector('.stage-icon').innerHTML = '<span class="check">✓</span>';
+    var badge = item.querySelector('.sbadge'); badge.className = 'sbadge done'; badge.textContent = 'Done';
+    var out = document.getElementById('sout-' + step);
+    if (output && out) { out.textContent = output.length > 1200 ? output.slice(0,1200) + '\n… (truncated)' : output; }
+    if (filesWritten && filesWritten.length) {
+      var fr = document.createElement('div'); fr.className = 'files-row';
+      fr.innerHTML = '<strong style="color:var(--text)">' + filesWritten.length + ' file(s) written:</strong> '
+        + filesWritten.map(function(f){ return '<span class="file-chip">' + esc(f.split('/').pop()) + '</span>'; }).join('');
+      item.appendChild(fr);
+    }
+    scrollBottom();
+  }
+
+  function addDoneCard(projectDir, allFiles) {
+    var row = document.createElement('div'); row.className = 'msg-row';
+    var av = document.createElement('div'); av.className = 'avatar bot-av'; av.innerHTML = '&#129302;';
+    var card = document.createElement('div'); card.className = 'done-card';
+    var chips = allFiles.slice(0,24).map(function(f){ return '<span class="file-chip">' + esc(f.split('/').slice(-2).join('/')) + '</span>'; }).join('');
+    var more  = allFiles.length > 24 ? '<br><span style="color:var(--text-muted)">&hellip; and ' + (allFiles.length - 24) + ' more</span>' : '';
+    card.innerHTML = '<div class="done-title">&#9989; Project generated successfully!</div>'
+      + '<div class="done-dir">' + esc(projectDir) + '</div>'
+      + '<div><strong style="color:var(--text)">' + allFiles.length + ' files written:</strong><br>' + chips + more + '</div>';
+    row.appendChild(av); row.appendChild(card); chatInner.appendChild(row);
+    scrollBottom();
+  }
+
+  function parseEvents(text) {
+    var out = [], blocks = text.split(/\n\n+/);
+    for (var b = 0; b < blocks.length; b++) {
+      var type = 'message', data = '', lines = blocks[b].split('\n');
+      for (var l = 0; l < lines.length; l++) {
+        if (lines[l].startsWith('event:')) type = lines[l].slice(6).trim();
+        if (lines[l].startsWith('data:'))  data = lines[l].slice(5).trim();
+      }
+      if (!data) continue;
+      try { out.push({ type: type, data: JSON.parse(data) }); } catch(e) {}
+    }
+    return out;
+  }
+
+  async function send() {
+    var message = msgInput.value.trim();
+    if (!message || isBusy) return;
+    isBusy = true; sendBtn.disabled = true;
+    msgInput.value = ''; msgInput.style.height = 'auto'; charCount.textContent = '0';
+    addUserBubble(message);
+    var pipelineActive = false, typingBubble = null, buffer = '';
+    try {
+      var resp = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: message })
+      });
+      if (!resp.ok) {
+        var err = await resp.json().catch(function(){ return { error: 'Unknown error' }; });
+        addBotBubble('Error: ' + (err.error || String(err)), true);
+        return;
+      }
+      if (!resp.body) {
+        addBotBubble('Error: Server returned an empty response body.', true);
+        return;
+      }
+      var reader = resp.body.getReader(), decoder = new TextDecoder();
+      while (true) {
+        var result = await reader.read();
+        if (result.done) break;
+        buffer += decoder.decode(result.value, { stream: true });
+        var events = parseEvents(buffer);
+        var cut = buffer.lastIndexOf('\n\n'); if (cut >= 0) buffer = buffer.slice(cut + 2);
+        for (var i = 0; i < events.length; i++) {
+          var ev = events[i];
+          if (ev.type === 'start') {
+            if (ev.data.mode === 'sdlc') { pipelineActive = true; createPipelineCard(); }
+            else typingBubble = addBotBubble('Thinking…');
+          } else if (ev.type === 'progress') {
+            if      (ev.data.status === 'running')   stageRunning(ev.data.step);
+            else if (ev.data.status === 'streaming') stageToken(ev.data.step, ev.data.token || '');
+            else if (ev.data.status === 'done')      stageDone(ev.data.step, ev.data.output, ev.data.filesWritten);
+          } else if (ev.type === 'message') {
+            if (typingBubble) { typingBubble.textContent = ev.data.content; typingBubble = null; }
+            else addBotBubble(ev.data.content);
+          } else if (ev.type === 'done') {
+            if (ev.data.projectDir) {
+              var ps2 = document.getElementById('ps'); if (ps2) ps2.textContent = '✅ Complete';
+              addDoneCard(ev.data.projectDir, ev.data.allFilesWritten || []);
+            }
+          } else if (ev.type === 'error') {
+            addBotBubble('⚠️ ' + (ev.data.message || 'Unknown error'), true);
+            var ps3 = document.getElementById('ps'); if (ps3) ps3.textContent = '❌ Failed';
+          }
+        }
+        scrollBottom();
+      }
+    } catch(err) {
+      addBotBubble('Network error — could not reach the server.', true);
+    } finally {
+      isBusy = false;
+      // Re-enable the button only if the user has typed something
+      sendBtn.disabled = !msgInput.value.trim();
+      msgInput.focus();
+    }
+  }
+
+  sendBtn.addEventListener('click', send);
+</script>
+</body>
+</html>
