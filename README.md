@@ -198,4 +198,125 @@ curl -X POST http://localhost:3000/api/research \
 | **Vector DB connection failed** | Check Qdrant is running on the configured `VECTOR_DB_URL` |
 | **Module not found** | Run `npm ci` to reinstall dependencies |
 
-## �🛠️ Architecture Overview
+## 🛠️ Architecture Overview
+
+The application is a **multi-agent software development assistant** built on Express.js. It exposes a chat interface that can either answer research questions via an LLM or trigger a full **Software Development Lifecycle (SDLC) pipeline** driven by a team of specialised AI agents.
+
+---
+
+### High-Level Structure
+
+```
+src/
+├── server.ts          # HTTP server bootstrap (binds port)
+├── app.ts             # Express app factory + middleware + route wiring
+├── index.ts           # Package entry point / public exports
+├── logger.ts          # Winston logger (respects LOG_LEVEL)
+│
+├── config/
+│   ├── config.ts      # Loads & validates environment variables
+│   ├── schemas.ts     # Zod schemas (source of truth for all config)
+│   └── errors.ts      # Typed application error classes
+│
+├── routes/
+│   ├── chat.ts        # POST /api/chat  – SSE-streamed unified endpoint
+│   ├── sdlc.ts        # POST /api/sdlc  – direct pipeline trigger
+│   └── research.ts    # POST /api/research – single Ollama query
+│
+└── agents/
+    ├── base.ts         # BaseAgent – shared Ollama fetch + streaming
+    ├── orchestrator.ts # SdlcOrchestrator – runs the 5-stage pipeline
+    ├── productOwner.ts # Stage 1 – requirements → user stories
+    ├── architect.ts    # Stage 2 – user stories → technical design
+    ├── developer.ts    # Stage 3 – design → implementation code
+    ├── reviewer.ts     # Stage 4 – code → review report
+    ├── tester.ts       # Stage 5 – artefacts → test suite
+    └── fileWriter.ts   # Parses code blocks & writes files to disk
+
+public/                # Static frontend (served at /)
+generated/             # Output directory for agent-generated projects
+```
+
+---
+
+### Request Flow
+
+#### Plain Chat / Research
+```
+Client → POST /api/chat
+           │
+           ├─ isBuildIntent() → false
+           │
+           └─ Ollama API (/api/chat)
+                └─ SSE: event: message → Client
+```
+
+#### SDLC Pipeline (Build Intent Detected)
+```
+Client → POST /api/chat  (or POST /api/sdlc)
+           │
+           ├─ isBuildIntent() → true
+           │
+           └─ SdlcOrchestrator.run()
+                │
+                ├─ Stage 1 – ProductOwnerAgent   → user stories + acceptance criteria
+                ├─ Stage 2 – ArchitectAgent       → component design, data models, API spec
+                ├─ Stage 3 – DeveloperAgent       → implementation code  ──► written to disk
+                ├─ Stage 4 – ReviewerAgent        → code review report
+                └─ Stage 5 – TesterAgent          → test suite            ──► written to disk
+                                │
+                                └─ SSE: event: progress (per stage) → Client
+                                   SSE: event: done (projectDir + files) → Client
+```
+
+Each stage streams tokens back to the client as `progress` Server-Sent Events while simultaneously accumulating the full output to pass as context to the next agent.
+
+---
+
+### Agent Pipeline Detail
+
+| Step | Agent | Input | Output |
+|------|-------|-------|--------|
+| 1 | **Product Owner** | Raw requirements text | User stories + acceptance criteria (Markdown) |
+| 2 | **Architect** | User stories | Technical design: components, data models, API endpoints, risks |
+| 3 | **Developer** | User stories + design | Production source code (language/framework from design) |
+| 4 | **Code Reviewer** | All previous artefacts | Review report: bugs, security issues, best-practice gaps |
+| 5 | **Tester** | All previous artefacts | Full test suite (JUnit / Jest / pytest etc.) |
+
+All agents extend `BaseAgent`, which handles Ollama communication (both streaming and non-streaming modes) and injects `Authorization` headers when `OLLAMA_API_KEY` is set.
+
+---
+
+### Key Design Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| **SSE over WebSockets** | Simpler one-way streaming from server → client; no extra WS server needed |
+| **Sequential pipeline** | Each agent's output is the next agent's context — ordering is intentional |
+| **LLM-agnostic via Ollama** | Any model served by Ollama (local or remote) works without code changes |
+| **Zod config validation** | Fails fast at startup with clear error messages if required env vars are missing |
+| **`generated/` output dir** | Keeps agent-created projects isolated from the service's own source tree |
+| **`isBuildIntent()` heuristic** | Single endpoint handles both chat and build requests; no explicit mode switch needed |
+
+---
+
+### API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/` | Serves the static frontend (`public/index.html`) |
+| `GET` | `/healthz` | Health check – returns `{ status: "ok" }` |
+| `POST` | `/api/chat` | Unified SSE endpoint: chat or full SDLC pipeline |
+| `POST` | `/api/sdlc` | Directly trigger the SDLC pipeline (JSON response) |
+| `GET` | `/api/sdlc/agents` | List all pipeline agents and their roles |
+| `POST` | `/api/research` | Single-shot research query via Ollama |
+
+---
+
+## 📸 Screenshots
+
+### Home Screen
+![Dev Assistant Home](docs/screen1.jpg)
+
+### SDLC Pipeline in Action
+![SDLC Pipeline Running](docs/screen2.jpg)
